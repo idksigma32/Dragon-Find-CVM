@@ -1,12 +1,165 @@
+
 "use client";
-import { useState } from "react";
-import { CheckCircle, CloudUpload } from "@mui/icons-material";
-import { Alert, Box, Button, Card, CircularProgress, FormControl, Grid, InputLabel, MenuItem, Select, Stack, TextField, Typography } from "@mui/material";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Alert, Box, Button, Card, FormControl,
+  InputLabel, MenuItem, Select, Stack,
+  TextField, Typography, Avatar
+} from "@mui/material";
+import { CloudUpload } from "@mui/icons-material";
+import { addItem, findDuplicateReports, updateItem, useMockData } from "@/lib/mock-store";
+
+const categories = [
+  "Clothing", "Electronics", "School supplies",
+  "Drinkware", "Keys & cards", "Bags", "Other"
+];
 
 export default function ReportPage() {
-  const [form, setForm] = useState({ item_type: "lost", title: "", category: "", description: "", location: "", date: "" }); const [image, setImage] = useState(null); const [message, setMessage] = useState(""); const [loading, setLoading] = useState(false);
-  const update = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-  async function submit(e) { e.preventDefault(); setMessage(""); const supabase = getSupabaseBrowserClient(); if (!supabase) return setMessage("Add your Supabase environment variables before submitting a report."); setLoading(true); const { data: { user } } = await supabase.auth.getUser(); if (!user) { setLoading(false); return setMessage("Please sign in before submitting a report."); } let image_path = null; if (image) { const ext = image.name.split(".").pop(); const path = `${user.id}/${crypto.randomUUID()}.${ext}`; const upload = await supabase.storage.from("item-images").upload(path, image); if (upload.error) { setLoading(false); return setMessage(upload.error.message); } image_path = path; } const result = await supabase.from("items").insert({ user_id: user.id, ...form, image_path, status: "open" }); setLoading(false); setMessage(result.error ? result.error.message : "Your report was submitted successfully."); if (!result.error) setForm({ item_type: "lost", title: "", category: "", description: "", location: "", date: "" }); }
-  return <Box component="main" sx={{ maxWidth: 800, mx: "auto", px: 2, py: 6 }}><Typography variant="overline" color="primary" fontWeight={700}>Help your community</Typography><Typography variant="h2" fontWeight={800}>Report an item</Typography><Typography color="text.secondary" sx={{ mb: 4 }}>The more detail you share, the faster it can find its way home.</Typography><Card sx={{ p: { xs: 3, sm: 4 } }}><Box component="form" onSubmit={submit}><Stack spacing={3}><FormControl><InputLabel>What happened?</InputLabel><Select label="What happened?" value={form.item_type} onChange={(e) => setForm({ ...form, item_type: e.target.value })}><MenuItem value="lost">I lost something</MenuItem><MenuItem value="found">I found something</MenuItem></Select></FormControl><Grid container spacing={2}><Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth required label="Item name" name="title" value={form.title} onChange={update} /></Grid><Grid size={{ xs: 12, sm: 6 }}><FormControl fullWidth required><InputLabel>Category</InputLabel><Select label="Category" name="category" value={form.category} onChange={update}>{["Clothing", "Electronics", "School supplies", "Drinkware", "Keys & cards", "Other"].map((x) => <MenuItem key={x} value={x}>{x}</MenuItem>)}</Select></FormControl></Grid></Grid><TextField fullWidth required multiline minRows={4} label="Description" name="description" value={form.description} onChange={update} /><Grid container spacing={2}><Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth required label="Location" name="location" value={form.location} onChange={update} /></Grid><Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth required type="date" label="Date" name="date" value={form.date} onChange={update} slotProps={{ inputLabel: { shrink: true } }} /></Grid></Grid><Button component="label" variant="outlined" startIcon={<CloudUpload />} sx={{ py: 2, borderStyle: "dashed" }}>{image ? image.name : "Upload a clear photo (optional)"}<input hidden type="file" accept="image/*" onChange={(e) => setImage(e.target.files?.[0] || null)} /></Button>{message && <Alert severity={message.includes("successfully") ? "success" : "error"} icon={message.includes("successfully") ? <CheckCircle /> : undefined}>{message}</Alert>}<Button type="submit" variant="contained" size="large" disabled={loading}>{loading ? <CircularProgress size={22} color="inherit" /> : "Submit report"}</Button></Stack></Box></Card></Box>;
+  const router = useRouter();
+  const { items } = useMockData();
+  const [editId, setEditId] = useState("");
+  useEffect(() => { setEditId(new URLSearchParams(window.location.search).get("edit") || ""); }, []);
+  const editing = Boolean(editId);
+  const [error, setError] = useState("");
+  const [photo, setPhoto] = useState("");
+  const [form, setForm] = useState({
+    item_type: "lost",
+    title: "",
+    category: "",
+    location: "",
+    description: "",
+    date: new Date().toLocaleDateString("en-CA")
+  });
+  const duplicateReports = findDuplicateReports(form, items).filter((item) => item.id !== editId);
+
+  useEffect(() => {
+    const item = items.find((entry) => entry.id === editId && entry.owner === "student-demo");
+    if (item) setForm({ item_type: item.item_type, title: item.title, category: item.category, location: item.location, description: item.description, date: item.created_at.slice(0, 10) });
+  }, [editId, items]);
+
+  function update(e) {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  }
+
+  function upload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Use a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Image must be smaller than 2 MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPhoto(reader.result);
+      setError("");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function submit(e) {
+    e.preventDefault();
+    setError("");
+
+    try {
+      const values = { ...form,
+        image_url: photo || items.find((item) => item.id === editId)?.image_url || "",
+        created_at: form.date
+      };
+      if (editing) updateItem(editId, values);
+      else addItem({
+        ...form,
+        image_url: photo || "",
+        created_at: form.date
+      });
+      router.push("/lost-found");
+    } catch {
+      setError("Could not save the report. Try a smaller image.");
+    }
+  }
+
+  return (
+    <Box sx={{ maxWidth: 760, mx: "auto", p: { xs: 2, md: 5 } }}>
+      <Typography variant="overline" color="primary">
+        {editing ? "EDIT YOUR REPORT" : "COMMUNITY REPORT"}
+      </Typography>
+      <Typography variant="h3" fontWeight={800}>
+        {editing ? "Edit your report" : "Report an Item"}
+      </Typography>
+      <Typography color="text.secondary" mb={4}>
+        {editing ? "Update the details so the community sees the most accurate information." : "Help return lost belongings to their owners."}
+      </Typography>
+
+      <Card sx={{ p: { xs: 3, md: 4 } }}>
+        <Box component="form" onSubmit={submit}>
+          <Stack spacing={3}>
+            <FormControl fullWidth>
+              <InputLabel>Report Type</InputLabel>
+              <Select name="item_type" value={form.item_type}
+                label="Report Type" onChange={update}>
+                <MenuItem value="lost">I lost something</MenuItem>
+                <MenuItem value="found">I found something</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField required label="Item Name"
+              name="title" value={form.title} onChange={update}
+              placeholder="Example: Black Hydro Flask" />
+
+            <FormControl fullWidth required>
+              <InputLabel>Category</InputLabel>
+              <Select name="category" label="Category"
+                value={form.category} onChange={update}>
+                {categories.map(c => (
+                  <MenuItem key={c} value={c}>{c}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <TextField required label="Location"
+              name="location" value={form.location} onChange={update}
+              placeholder="Example: Library" />
+
+            <TextField required label="Date"
+              type="date" name="date" value={form.date}
+              onChange={update}
+              slotProps={{ inputLabel: { shrink: true } }} />
+
+            <TextField required multiline minRows={4}
+              label="Description" name="description"
+              value={form.description} onChange={update}
+              helperText="Don't reveal private ownership-verification details." />
+
+            <Button component="label" variant="outlined"
+              startIcon={<CloudUpload />} sx={{ py: 2 }}>
+              Upload Photo
+              <input hidden type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={upload} />
+            </Button>
+
+            {photo && (
+              <Avatar variant="rounded" src={photo}
+                alt="Uploaded item preview"
+                sx={{ width: "100%", height: 220 }} />
+            )}
+
+            {error && <Alert severity="error">{error}</Alert>}
+            {duplicateReports.length > 0 && <Alert severity="warning">A similar {form.item_type} report already exists for this item and location. Review it before submitting a duplicate.</Alert>}
+
+            <Button type="submit" size="large" variant="contained">
+              {editing ? "Save changes" : "Submit Report"}
+            </Button>
+          </Stack>
+        </Box>
+      </Card>
+    </Box>
+  );
 }
