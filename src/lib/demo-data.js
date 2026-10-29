@@ -1,0 +1,6 @@
+export const demoItems = [
+  { id: "demo-1", title: "Green water bottle", category: "Drinkware", location: "Science Building", item_type: "found", created_at: "2025-09-16", description: "A forest green insulated bottle with a silver cap.", image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=800&q=80" },
+  { id: "demo-2", title: "Wireless headphones", category: "Electronics", location: "Library", item_type: "lost", created_at: "2025-09-14", description: "Black over-ear headphones in a soft grey case.", image_url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80" },
+  { id: "demo-3", title: "Blue knit scarf", category: "Clothing", location: "East Courtyard", item_type: "found", created_at: "2025-09-12", description: "A soft navy blue scarf with a subtle pattern.", image_url: "https://images.unsplash.com/photo-1609803384069-19f3c6fce7d6?auto=format&fit=crop&w=800&q=80" },
+  { id: "demo-4", title: "Black pencil case", category: "School supplies", location: "Room 204", item_type: "lost", created_at: "2025-09-10", description: "Canvas pencil case with a small embroidered star.", image_url: "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80" }
+];
